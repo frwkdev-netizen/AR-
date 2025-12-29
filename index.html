@@ -1,94 +1,133 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>TeleGraffiti AR</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src='https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js'></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>AR Bot Fast</title>
+    
+    <!-- Стили -->
     <style>
-        .glass { background: rgba(20, 20, 20, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .radar-pulse { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 10px; height: 10px; background: #00ff88; border-radius: 50%; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); } 100% { box-shadow: 0 0 0 20px rgba(0,0,0,0); } }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+        
+        /* Экран приветствия (чтобы работало на iPhone) */
+        #start-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        
+        button {
+            padding: 15px 30px; font-size: 18px; font-weight: bold;
+            color: white; background: #ff0055; border: none; border-radius: 50px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer;
+        }
+
+        /* Консоль ошибок на экране (для отладки) */
+        #debug {
+            position: fixed; top: 10px; left: 10px; z-index: 10000;
+            color: #00ff00; background: rgba(0,0,0,0.5); padding: 5px;
+            font-size: 10px; max-width: 80%; pointer-events: none;
+        }
+
+        /* UI внутри AR */
+        #ar-ui {
+            display: none; position: fixed; bottom: 20px; width: 100%; text-align: center; z-index: 100;
+        }
     </style>
+
+    <!-- Подключаем легкие версии библиотек -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <!-- Используем простую версию AR.js -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 </head>
-<body style="margin: 0; overflow: hidden; background: #000;">
 
-    <!-- UI ИНТЕРФЕЙС -->
-    <div id="loader" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white">
-        <h1 class="text-3xl font-bold font-mono text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">TeleGraffiti</h1>
-        <p class="text-gray-500 mt-2 text-sm">AR SYSTEM v1.0</p>
-        <button onclick="startAR()" class="mt-8 px-8 py-3 bg-white text-black font-bold rounded-full hover:scale-105 transition">START SYSTEM</button>
+<body>
+
+    <!-- 1. Экран старта -->
+    <div id="start-screen">
+        <h1 style="color:white; margin-bottom: 20px;">AR TELEGRAM</h1>
+        <button onclick="startCamera()">📸 ЗАПУСТИТЬ КАМЕРУ</button>
+        <p style="color: #ccc; margin-top: 20px; font-size: 12px;">Разрешите доступ к камере после нажатия</p>
     </div>
 
-    <div id="hud" class="fixed inset-0 z-40 pointer-events-none hidden">
-        <div class="absolute top-4 left-4 right-4 flex justify-between">
-            <div class="glass text-white px-4 py-2 rounded-full flex gap-2 pointer-events-auto">
-                <i class="fa-solid fa-cube text-purple-400"></i> <span id="score">0</span> pts
-            </div>
-            <div class="glass text-white w-10 h-10 rounded-full flex items-center justify-center pointer-events-auto" onclick="Telegram.WebApp.close()">✖</div>
-        </div>
-        
-        <div class="absolute bottom-10 w-full flex justify-center gap-4 px-4 pointer-events-auto">
-            <button onclick="spawnDemo()" class="glass text-white py-3 px-6 rounded-xl w-full active:bg-white/20 transition">
-                <i class="fa-solid fa-bug"></i> ТЕСТ: Спавн тут
-            </button>
-        </div>
-        
-        <div class="absolute bottom-28 w-full text-center"><span id="debug" class="text-xs text-green-400 bg-black/50 px-2">Waiting for GPS...</span></div>
+    <!-- 2. Лог для отладки -->
+    <div id="debug">System ready...</div>
+
+    <!-- 3. Кнопка действия (скрыта пока нет AR) -->
+    <div id="ar-ui">
+        <button onclick="finishTask()" style="background: #00cc66;">✅ Я НАШЕЛ КУБ</button>
     </div>
 
-    <!-- AR СЦЕНА -->
-    <a-scene vr-mode-ui="enabled: false" embedded arjs='sourceType: webcam; videoTexture: true; debugUIEnabled: false;'>
-        <a-camera gps-camera rotation-reader>
-            <a-cursor visible="false"></a-cursor>
-        </a-camera>
+    <!-- 4. AR Сцена -->
+    <!-- embedded и vr-mode-ui="enabled: false" важны для скорости -->
+    <a-scene 
+        embedded 
+        vr-mode-ui="enabled: false"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true;"
+        id="scene"
+        style="display: none;"> <!-- Скрыта до старта -->
+
+        <!-- КУБ. position="0 0 -3" значит 3 метра ПЕРЕД телефоном -->
+        <a-box 
+            position="0 0.5 -3" 
+            rotation="0 45 0" 
+            color="#4CC3D9" 
+            scale="1 1 1"
+            animation="property: rotation; to: 0 405 0; loop: true; dur: 4000">
+        </a-box>
+
+        <!-- Камера без GPS (легкая) -->
+        <a-entity camera></a-entity>
     </a-scene>
 
     <script>
-        let score = 0;
         const tg = window.Telegram.WebApp;
-        tg.ready(); tg.expand();
-
-        function startAR() {
-            document.getElementById('loader').style.display = 'none';
-            document.getElementById('hud').classList.remove('hidden');
-            initGPS();
+        tg.ready();
+        tg.expand();
+        
+        const debugEl = document.getElementById('debug');
+        
+        function log(msg) {
+            debugEl.innerHTML += '<br>' + msg;
+            console.log(msg);
         }
 
-        function initGPS() {
-            if(!navigator.geolocation) return;
-            navigator.geolocation.watchPosition(
-                (pos) => {
-                    document.getElementById('debug').innerText = `GPS: ${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}`;
-                },
-                (err) => alert("Включи GPS!"), {enableHighAccuracy: true}
-            );
-        }
-
-        // Спавнит куб прямо перед лицом (для теста, если GPS глючит)
-        function spawnDemo() {
-            const scene = document.querySelector('a-scene');
-            const box = document.createElement('a-box');
-            box.setAttribute('material', 'color: #8b5cf6; opacity: 0.9');
-            box.setAttribute('scale', '1 1 1');
-            box.setAttribute('position', '0 0 -3'); // 3 метра перед камерой
-            box.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 4000');
+        function startCamera() {
+            log("Запуск...");
             
-            // Клик по кубу
-            box.addEventListener('click', () => {
-                box.setAttribute('visible', 'false');
-                score += 100;
-                document.getElementById('score').innerText = score;
-                tg.HapticFeedback.notificationOccurred('success');
-            });
+            // 1. Скрываем кнопку старта
+            document.getElementById('start-screen').style.display = 'none';
+            
+            // 2. Показываем сцену
+            const scene = document.querySelector('a-scene');
+            scene.style.display = 'block';
+            
+            // 3. Показываем кнопку "Нашел"
+            document.getElementById('ar-ui').style.display = 'block';
 
-            scene.appendChild(box);
-            tg.HapticFeedback.impactOccurred('heavy');
+            // Принудительно триггерим ресайз, чтобы AR.js подхватил размеры экрана
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+                log("Камера активирована (надеюсь)");
+            }, 1000);
         }
+
+        function finishTask() {
+            tg.HapticFeedback.notificationOccurred('success');
+            tg.sendData("Куб найден!");
+        }
+
+        // Ловим ошибки A-Frame
+        document.querySelector('a-scene').addEventListener('loaded', function () {
+            log("Сцена загружена");
+        });
+        
+        document.querySelector('a-scene').addEventListener('arjs-video-loaded', function (e) {
+            log("Видеопоток получен!");
+        });
     </script>
 </body>
 </html>
